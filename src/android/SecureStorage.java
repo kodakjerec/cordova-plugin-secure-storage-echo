@@ -3,6 +3,9 @@ package com.crypho.plugins;
 import java.lang.reflect.Method;
 import java.util.Hashtable;
 
+import android.annotation.TargetApi;
+import android.hardware.biometrics.BiometricPrompt;
+import android.os.CancellationSignal;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.Base64;
@@ -225,9 +228,55 @@ public class SecureStorage extends CordovaPlugin {
     private void unlockCredentials(final String title, final String description) {
         cordova.getActivity().runOnUiThread(new Runnable() {
             public void run() {
-                KeyguardManager keyguardManager = (KeyguardManager) (getContext().getSystemService(Context.KEYGUARD_SERVICE));
-                Intent intent = keyguardManager.createConfirmDeviceCredentialIntent(title, description);
-                startActivity(intent);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    BiometricPrompt biometricPrompt = new BiometricPrompt.Builder(cordova.getContext())
+                            .setTitle(title)
+                            .setDescription(description)
+                            .setDeviceCredentialAllowed(true)
+                            .build();
+                    biometricPrompt.authenticate(getCancellationSignal(), cordova.getContext().getMainExecutor(),getAuthenticationCallback());
+                } else {
+                    KeyguardManager keyguardManager = (KeyguardManager) (getContext().getSystemService(Context.KEYGUARD_SERVICE));
+                    Intent intent = keyguardManager.createConfirmDeviceCredentialIntent(title, description);
+                    startActivity(intent);
+                }
+            }
+
+            @TargetApi(Build.VERSION_CODES.Q)
+            private CancellationSignal getCancellationSignal() {
+                CancellationSignal cancellationSignal = new CancellationSignal();
+                cancellationSignal.setOnCancelListener(() -> Log.d(TAG,"cancellationSignal"));
+                return cancellationSignal;
+            }
+
+            @TargetApi(Build.VERSION_CODES.Q)
+            private BiometricPrompt.AuthenticationCallback getAuthenticationCallback() {
+                return new BiometricPrompt.AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationError(int errorCode,
+                                                      CharSequence errString) {
+                        Log.d(TAG,"Authentication error: " + errString);
+                        super.onAuthenticationError(errorCode, errString);
+                    }
+
+                    @Override
+                    public void onAuthenticationHelp(int helpCode,
+                                                     CharSequence helpString) {
+                        super.onAuthenticationHelp(helpCode, helpString);
+                    }
+
+                    @Override
+                    public void onAuthenticationFailed() {
+                        super.onAuthenticationFailed();
+                    }
+
+                    @Override
+                    public void onAuthenticationSucceeded(
+                            BiometricPrompt.AuthenticationResult result) {
+                        Log.d(TAG,"Authentication Succeeded");
+                        super.onAuthenticationSucceeded(result);
+                    }
+                };
             }
         });
     }
